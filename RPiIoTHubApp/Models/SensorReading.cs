@@ -12,7 +12,7 @@ namespace RPiIoTHubApp.Models
         /// Device Id
         /// </summary>
         public string deviceId { get; set; }
-        public string msgId { get; set; }
+        //public string msgId { get; set; }
         public DateTime time { get; set; }
 
         /// <summary>

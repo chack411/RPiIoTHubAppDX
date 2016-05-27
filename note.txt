@@ -1,0 +1,10 @@
+https://github.com/ms-iot/samples
+
+https://celebratelife24x7.wordpress.com/2014/11/02/electronics-101-raspberry-pi/
+
+https://cdn-learn.adafruit.com/downloads/pdf/reading-a-analog-in-and-controlling-audio-volume-with-the-raspberry-pi.pdf
+
+http://qiita.com/masato/items/f089a17b1c9329eb7d03
+
+http://akizukidenshi.com/download/ds/microchip/mcp3008.pdf
+

@@ -20,6 +20,7 @@ namespace RPiIoTHubApp
     using Microsoft.Azure.Devices.Client;
     using Newtonsoft.Json;
     using System.Net;
+    using Windows.Devices.Gpio;
 #endif
     /// <summary>
     /// それ自体で使用できる空白ページまたはフレーム内に移動できる空白ページ。
@@ -31,21 +32,25 @@ namespace RPiIoTHubApp
 
         // Identifier of this board. this value will be set by this app.
         string deviceId = "";
-        double Latitude = 35.62661;
-        double Longitude = 139.740987;
 
         // IoT Hub Configuration
         string IoTHubEndpoint = "JPHack.azure-devices.net";
         string DeviceKey = "zPmuVka/fdpCMeryWyqnDCpVijtPgu8OZpYm7M4f9a0=";
         bool IoTServiceAvailabled = true;
 
-        private DispatcherTimer measureTimer;
-        private long measureIntervalMSec = 2000;
-
         private DispatcherTimer uploadTimer;
         private long uploadIntervalMSec = 10000;
 
         IoTKitHoLSensor sensor;
+
+        private const int LED_PIN_A = 5;
+        private const int LED_PIN_B = 6;
+        private const int LED_PIN_C = 13;
+
+        private GpioPin pinA;
+        private GpioPin pinB;
+        private GpioPin pinC;
+        //private GpioPinValue pinValue;
 
         public MainPage()
         {
@@ -58,12 +63,10 @@ namespace RPiIoTHubApp
             FixDeviceId();
             var result = await TryConnect();
             sensor = IoTKitHoLSensor.GetCurrent(IoTKitHoLSensor.TemperatureSensor.BME280);
-            measureTimer = new DispatcherTimer();
-            measureTimer.Interval = TimeSpan.FromMilliseconds(measureIntervalMSec);
-            measureTimer.Tick += MeasureTimer_Tick;
-            measureTimer.Start();
 
             InitializeUpload();
+
+            InitGPIO();
         }
 
         async Task<bool> TryConnect()
@@ -114,7 +117,7 @@ namespace RPiIoTHubApp
             }
         }
 
-        private void MeasureTimer_Tick(object sender, object e)
+        private void UploadTimer_Tick(object sender, object e)
         {
             var sensorReading = sensor.TakeMeasurement();
             lock (this)
@@ -122,49 +125,33 @@ namespace RPiIoTHubApp
                 lastTemperature = sensorReading.Temperature;
                 lastHumidity = sensorReading.Humidity;
                 lastPressure = sensorReading.Pressure;
-                //lastAccelX = sensorReading.AccelX;
-                //lastAccelY = sensorReading.AccelY;
-                //lastAccelZ = sensorReading.AccelZ;
             }
-            Debug.WriteLine("Measured:" + " T=" + sensorReading.Temperature+", H=" + sensorReading.Humidity + ", P=" + sensorReading.Pressure);
-            //Debug.WriteLine("Measured - accelx=" + sensorReading.AccelX + ",accely=" + sensorReading.AccelY + ",accelz=" + sensorReading.AccelZ + ",T=" + sensorReading.Temperature + ",H=" + sensorReading.Humidity + ",P=" + sensorReading.Pressure);
-        }
 
-        private void UploadTimer_Tick(object sender, object e)
-        {
             uploadTimer.Stop();
             Upload();
             uploadTimer.Start();
         }
 
         int counter = 0;
+
         async void Upload()
         {
 #if (ACCESS_IOT_HUB)
-            var now = DateTime.Now;
-            var sensorReading = new Models.SensorReading()
-            {
-                msgId = deviceId.ToString() + now.ToString("yyyyMMddhhmmssfff")
-            };
+            var sensorReading = new Models.SensorReading();
             lock (this)
             {
                 sensorReading.deviceId = deviceId.ToString();
+                sensorReading.time = DateTime.Now;
                 sensorReading.Temperature = lastTemperature;
                 sensorReading.Humidity = lastHumidity;
                 sensorReading.Pressure = lastPressure;
-                //sensorReading.accelx = lastAccelX;
-                //sensorReading.accely = lastAccelY;
-                //sensorReading.accelz = lastAccelZ;
-                sensorReading.time = now;
-                //sensorReading.Latitude = Latitude;
-                //sensorReading.Longitude = Longitude;
             }
             var payload = JsonConvert.SerializeObject(sensorReading);
             var message = new Message(System.Text.UTF8Encoding.UTF8.GetBytes(payload));
             try
             {
                 await deviceClient.SendEventAsync(message);
-                Debug.WriteLine("Send[" + counter++ + "]@" + now.Ticks);
+                Debug.WriteLine("Measured[" + counter++ +"]" + " T=" + sensorReading.Temperature + ", H=" + sensorReading.Humidity + ", P=" + sensorReading.Pressure);
             }
             catch (Exception ex)
             {
@@ -254,6 +241,38 @@ namespace RPiIoTHubApp
                     {
                         messageData = Encoding.ASCII.GetString(receivedMessage.GetBytes());
                         Debug.WriteLine("\t{0}> Received message: {1}", DateTime.Now.ToLocalTime(), messageData);
+
+                        if (messageData.CompareTo("R") == 0)
+                        {
+                            pinA.Write(GpioPinValue.High);
+                            pinB.Write(GpioPinValue.Low);
+                            pinC.Write(GpioPinValue.High);
+                        }
+                        else if (messageData.CompareTo("G") == 0)
+                        {
+                            pinA.Write(GpioPinValue.High);
+                            pinB.Write(GpioPinValue.High);
+                            pinC.Write(GpioPinValue.Low);
+                        }
+                        else if (messageData.CompareTo("B") == 0)
+                        {
+                            pinA.Write(GpioPinValue.Low);
+                            pinB.Write(GpioPinValue.High);
+                            pinC.Write(GpioPinValue.High);
+                        }
+                        else if (messageData.CompareTo("A") == 0)
+                        {
+                            pinA.Write(GpioPinValue.Low);
+                            pinB.Write(GpioPinValue.Low);
+                            pinC.Write(GpioPinValue.Low);
+                        }
+                        else
+                        {
+                            pinA.Write(GpioPinValue.High);
+                            pinB.Write(GpioPinValue.High);
+                            pinC.Write(GpioPinValue.High);
+                        }
+
                         await deviceClient.CompleteAsync(receivedMessage);
                     }
                 }
@@ -267,12 +286,35 @@ namespace RPiIoTHubApp
 
         }
 #endif
+        private void InitGPIO()
+        {
+            var gpio = GpioController.GetDefault();
 
-        double lastHumidity;
-        double lastPressure;
-        double lastTemperature;
-        double lastAccelX;
-        double lastAccelY;
-        double lastAccelZ;
+            // Show an error if there is no GPIO controller
+            if (gpio == null)
+            {
+                pinA = pinB = null;
+                Debug.WriteLine("There is no GPIO controller on this device.");
+                return;
+            }
+
+            pinA = gpio.OpenPin(LED_PIN_A);
+            pinA.Write(GpioPinValue.High);
+            pinA.SetDriveMode(GpioPinDriveMode.Output);
+
+            pinB = gpio.OpenPin(LED_PIN_B);
+            pinB.Write(GpioPinValue.High);
+            pinB.SetDriveMode(GpioPinDriveMode.Output);
+
+            pinC = gpio.OpenPin(LED_PIN_C);
+            pinC.Write(GpioPinValue.High);
+            pinC.SetDriveMode(GpioPinDriveMode.Output);
+
+            Debug.WriteLine("GPIO pin initialized correctly.");
+        }
+
+        double lastHumidity = 0;
+        double lastPressure = 0;
+        double lastTemperature = 0;
     }
 }
