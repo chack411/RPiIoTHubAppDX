@@ -34,8 +34,8 @@ namespace RPiIoTHubApp
         string deviceId = "";
 
         // IoT Hub Configuration
-        string IoTHubEndpoint = "JPHack.azure-devices.net";
-        string DeviceKey = "zPmuVka/fdpCMeryWyqnDCpVijtPgu8OZpYm7M4f9a0=";
+        string IoTHubEndpoint = "<XXXX>.azure-devices.net";
+        string DeviceKey = "<Primary Key>";
         bool IoTServiceAvailabled = true;
 
         private DispatcherTimer uploadTimer;
